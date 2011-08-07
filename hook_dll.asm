@@ -64,13 +64,13 @@ proc MouseProc uses ebx, nCode,wParam,lParam
     ret
 endp
 
-proc InstallHook
+proc InstallHook uses eax
     invoke SetWindowsHookEx,WH_MOUSE,MouseProc,[hInstance],NULL
     mov    [hHook],eax
     ret
 endp
 
-proc UninstallHook
+proc UninstallHook uses eax
     invoke ClipCursor,NULL
     invoke UnhookWindowsHookEx,[hHook]
     ret
