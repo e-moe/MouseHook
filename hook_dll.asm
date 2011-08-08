@@ -5,6 +5,13 @@ entry DllEntryPoint
 
 include 'win32axp.inc'
 
+struct MOUSEHOOKSTRUCT
+  pt		POINT
+  hwnd		dd ?
+  wHitTestCode	dd ?
+  dwExtraInfo	dd ?
+ends
+
 section '.data' data readable writeable
 
   hInstance dd 0
