@@ -27,13 +27,14 @@ section '.data' data readable writeable
 
   _reg_autorun db 'Software\Microsoft\Windows\CurrentVersion\Run',0
 
-  _priority dd ?
+  _priority   dd ?
 
-  menu_nhdl dd ?
-  wnd_hndl dd ?
-  mutex_hndl dd ?
+  hInstance   dd ?
+  menu_nhdl   dd ?
+  wnd_hndl    dd ?
+  mutex_hndl  dd ?
 
-  target_pid dd ?
+  target_pid  dd ?
   target_hndl dd ?
 
   WM_TASKBARCREATED dd ?
@@ -46,7 +47,8 @@ section '.data' data readable writeable
   RC_menu_id = 100
   cmd_About = 101
   cmd_Autorun = 102
-  cmd_Exit = 103
+  cmd_Config = 103
+  cmd_Exit = 104
 
   hKey dd ?
   KeyAutorunType dd REG_SZ
@@ -71,6 +73,7 @@ section '.code' code readable executable
 	.endif
 
 	invoke	GetModuleHandle,0
+	mov	[hInstance],eax
 	mov	[wc.hInstance],eax
 	invoke	LoadIcon,0,IDI_ASTERISK
 	mov	[wc.hIcon],eax
@@ -81,14 +84,14 @@ section '.code' code readable executable
 	   jmp	   exit
 	.endif
 
-	invoke	CreateWindowEx,0,_class,_title,0,0,0,0,0,NULL,NULL,[wc.hInstance],NULL
+	invoke	CreateWindowEx,0,_class,_title,0,0,0,0,0,NULL,NULL,[hInstance],NULL
 	.if eax = 0
 	   jmp	   exit
 	.else
 	   mov	   [wnd_hndl],eax
 	.endif
 
-	invoke	LoadMenu,[wc.hInstance],RC_menu_id
+	invoke	LoadMenu,[hInstance],RC_menu_id
 	invoke	GetSubMenu,eax,0
 	mov	[menu_nhdl],eax
 	invoke	RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
@@ -145,6 +148,8 @@ proc WindowProc uses ebx, hwnd,wmsg,wparam,lparam
 	      .ShowAboutBox
 	   .elseif [wparam] = cmd_Exit
 	      invoke  PostMessage,[wnd_hndl],WM_CLOSE,0,0
+	   .elseif [wparam] = cmd_Config
+	      invoke  DialogBoxParam,[hInstance],IDD_POSITION,[wnd_hndl],PositionDialog,0
 	   .elseif [wparam] = cmd_Autorun
 	      invoke  GetMenuState,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND
 	      and     eax,MF_CHECKED
@@ -186,6 +191,40 @@ proc WindowProc uses ebx, hwnd,wmsg,wparam,lparam
 	ret
 endp
 
+proc PositionDialog hwnd_dlg,msg,wparam,lparam
+	push	ebx esi edi
+	cmp	[msg],WM_INITDIALOG
+	je	.initdialog
+	cmp	[msg],WM_COMMAND
+	je	.command
+	cmp	[msg],WM_CLOSE
+	je	.close
+	xor	eax,eax
+	jmp	.finish
+  .initdialog:
+	jmp	.processed
+  .command:
+	cmp	[wparam],IDCANCEL
+	je	.close
+	cmp	[wparam],IDOK
+	jne	.processed
+	;invoke  GetDlgItemInt,[hwnd_dlg],ID_ROW,param_buffer,FALSE
+	;mov     [aepos.caretLine],eax
+	;mov     [aepos.selectionLine],eax
+	;invoke  IsDlgButtonChecked,[hwnd_dlg],ID_SELECT
+	;or      eax,eax
+	;jz      .position
+	invoke	MessageBox,0,'ok btn',_msg_caption,MB_OK+MB_ICONINFORMATION
+	jmp	.processed
+  .close:
+	invoke	EndDialog,[hwnd_dlg],FALSE
+  .processed:
+	mov	eax,1
+  .finish:
+	pop	edi esi ebx
+	ret
+endp
+
 
 section '.idata' import data readable writeable
 
@@ -208,22 +247,39 @@ section '.rsrc' resource data readable
 
   ; resource directory
 
-  directory RT_MENU,menus,\
+  directory RT_DIALOG,dialogs,\
+	    RT_MENU,menus,\
 	    RT_VERSION,versions
 
   ; resource subdirectories
 
-  resource versions,\
-	   1,LANG_NEUTRAL,version
+  IDD_POSITION	      = 301
+
+  resource dialogs,\
+	   IDD_POSITION,LANG_ENGLISH+SUBLANG_DEFAULT,position_dialog
 
   resource menus,\
 	   RC_menu_id,LANG_ENGLISH+SUBLANG_DEFAULT,popup_menu
+
+  resource versions,\
+	   1,LANG_NEUTRAL,version
+
+  dialog position_dialog,'Position',40,40,126,54,WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME
+    dialogitem 'STATIC','&Row:',-1,4,8,28,8,WS_VISIBLE+SS_RIGHT
+    dialogitem 'EDIT','',777,36,6,34,12,WS_VISIBLE+WS_BORDER+WS_TABSTOP+ES_NUMBER
+    dialogitem 'STATIC','&Column:',-1,4,26,28,8,WS_VISIBLE+SS_RIGHT
+    dialogitem 'EDIT','',999,36,24,34,12,WS_VISIBLE+WS_BORDER+WS_TABSTOP+ES_NUMBER
+    dialogitem 'BUTTON','&Select',696,36,42,48,8,WS_VISIBLE+WS_TABSTOP+BS_AUTOCHECKBOX
+    dialogitem 'BUTTON','OK',IDOK,78,6,42,14,WS_VISIBLE+WS_TABSTOP+BS_DEFPUSHBUTTON
+    dialogitem 'BUTTON','C&ancel',IDCANCEL,78,22,42,14,WS_VISIBLE+WS_TABSTOP+BS_PUSHBUTTON
+  enddialog
 
   menu popup_menu
        menuitem '',0,MFR_POPUP+MFR_END
 	      menuitem 'About',cmd_About
 	      menuseparator
 	      menuitem 'Autorun',cmd_Autorun
+	      menuitem 'Config',cmd_Config
 	      menuseparator
 	      menuitem 'Exit',cmd_Exit,MFR_END
 
