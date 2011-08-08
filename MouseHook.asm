@@ -22,7 +22,7 @@ section '.data' data readable writeable
 
   _msg_caption db 'MouseHook',0
   _msg_about db 'MouseHook ver 0.1, Freeware edition.',13,10,\
-		'2011 (c) Nikolay Labinskiy aka e-moe',13,10,\
+		'2011 ',0A9h,' Nikolay Labinskiy aka e-moe',13,10,\
 		'e-mail: e-moe@ukr.net',0
 
   _reg_autorun db 'Software\Microsoft\Windows\CurrentVersion\Run',0
@@ -43,11 +43,10 @@ section '.data' data readable writeable
   pt POINT 0,0
   msg MSG
 
-  cmd_About = 1
-  cmd_Separator1 = 2
-  cmd_Autorun = 3
-  cmd_Separator2 = 4
-  cmd_Exit = 5
+  RC_menu_id = 100
+  cmd_About = 101
+  cmd_Autorun = 102
+  cmd_Exit = 103
 
   hKey dd ?
   KeyAutorunType dd REG_SZ
@@ -89,20 +88,17 @@ section '.code' code readable executable
 	   mov	   [wnd_hndl],eax
 	.endif
 
-	invoke	CreatePopupMenu
+	invoke	LoadMenu,[wc.hInstance],RC_menu_id
+	invoke	GetSubMenu,eax,0
 	mov	[menu_nhdl],eax
-	invoke	AppendMenu,[menu_nhdl],MF_STRING,cmd_About,_about
-	invoke	AppendMenu,[menu_nhdl],MF_SEPARATOR,cmd_Separator1,0
 	invoke	RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
 	invoke	RegQueryValueEx,[hKey],_title,NULL,KeyAutorunType,ProgrPath,DataSize
 	.if eax = ERROR_SUCCESS
-	   invoke  AppendMenu,[menu_nhdl],MF_STRING+MF_CHECKED,cmd_Autorun,_autorun
+	   invoke  CheckMenuItem,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND + MF_CHECKED
 	.else
-	   invoke  AppendMenu,[menu_nhdl],MF_STRING,cmd_Autorun,_autorun
+	   invoke  CheckMenuItem,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND + MF_UNCHECKED
 	.endif
 	invoke	RegCloseKey,[hKey]
-	invoke	AppendMenu,[menu_nhdl],MF_SEPARATOR,cmd_Separator2,0
-	invoke	AppendMenu,[menu_nhdl],MF_STRING,cmd_Exit,_exit
 
 	mov	eax,[wnd_hndl]
 	mov	[ntf.hWnd],eax
@@ -131,13 +127,12 @@ section '.code' code readable executable
 	invoke	ExitProcess,[msg.wParam]
 
 
-proc WindowProc hwnd,wmsg,wparam,lparam
+proc WindowProc uses ebx, hwnd,wmsg,wparam,lparam
   macro .ShowAboutBox
   {
     invoke    MessageBox,0,_msg_about,_msg_caption,MB_OK+MB_ICONINFORMATION
   }
 
-	push	ebx esi edi
 	mov	eax,[wmsg]
 	.if eax = WM_DESTROY
 	   invoke  PostQuitMessage,0
@@ -177,7 +172,7 @@ proc WindowProc hwnd,wmsg,wparam,lparam
 	   .elseif [lparam] = WM_RBUTTONUP
 	      invoke  SetForegroundWindow,[wnd_hndl]
 	      invoke  GetCursorPos,pt
-	      invoke  TrackPopupMenu,[menu_nhdl],0,[pt.x],[pt.y],0,[wnd_hndl],0
+	      invoke  TrackPopupMenuEx,[menu_nhdl],0,[pt.x],[pt.y],[wnd_hndl],NULL
 	      invoke  PostMessage,[wnd_hndl],WM_NULL,0,0
 	   .endif
 
@@ -188,7 +183,6 @@ proc WindowProc hwnd,wmsg,wparam,lparam
 	   invoke  DefWindowProc,[hwnd],[wmsg],[wparam],[lparam]
 	.endif
 
-	pop	edi esi ebx
 	ret
 endp
 
@@ -209,3 +203,34 @@ section '.idata' import data readable writeable
   import hook_dll,\
 	 InstallHook,'InstallHook',\
 	 UninstallHook,'UninstallHook'
+
+section '.rsrc' resource data readable
+
+  ; resource directory
+
+  directory RT_MENU,menus,\
+	    RT_VERSION,versions
+
+  ; resource subdirectories
+
+  resource versions,\
+	   1,LANG_NEUTRAL,version
+
+  resource menus,\
+	   RC_menu_id,LANG_ENGLISH+SUBLANG_DEFAULT,popup_menu
+
+  menu popup_menu
+       menuitem '',0,MFR_POPUP+MFR_END
+	      menuitem 'About',cmd_About
+	      menuseparator
+	      menuitem 'Autorun',cmd_Autorun
+	      menuseparator
+	      menuitem 'Exit',cmd_Exit,MFR_END
+
+  versioninfo version,VOS__WINDOWS32,VFT_APP,VFT2_UNKNOWN,LANG_ENGLISH+SUBLANG_DEFAULT,0,\
+	      'FileDescription','MouseHook - Multiple screen mouse helper',\
+	      'ProductName','MouseHook - Multiple screen mouse helper',\
+	      'LegalCopyright',<'2011 ',0A9h,' Nikolay Labinskiy aka e-moe.'>,\
+	      'FileVersion','0.1',\
+	      'ProductVersion','0.1',\
+	      'OriginalFilename','MouseHook.exe'
