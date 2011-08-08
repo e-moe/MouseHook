@@ -149,7 +149,7 @@ proc WindowProc uses ebx, hwnd,wmsg,wparam,lparam
 	   .elseif [wparam] = cmd_Exit
 	      invoke  PostMessage,[wnd_hndl],WM_CLOSE,0,0
 	   .elseif [wparam] = cmd_Config
-	      invoke  DialogBoxParam,[hInstance],IDD_POSITION,[wnd_hndl],PositionDialog,0
+	      invoke  DialogBoxParam,[hInstance],IDD_CONFIG,[wnd_hndl],ConfigDialog,0
 	   .elseif [wparam] = cmd_Autorun
 	      invoke  GetMenuState,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND
 	      and     eax,MF_CHECKED
@@ -191,37 +191,31 @@ proc WindowProc uses ebx, hwnd,wmsg,wparam,lparam
 	ret
 endp
 
-proc PositionDialog hwnd_dlg,msg,wparam,lparam
-	push	ebx esi edi
-	cmp	[msg],WM_INITDIALOG
-	je	.initdialog
-	cmp	[msg],WM_COMMAND
-	je	.command
-	cmp	[msg],WM_CLOSE
-	je	.close
-	xor	eax,eax
-	jmp	.finish
-  .initdialog:
-	jmp	.processed
-  .command:
-	cmp	[wparam],IDCANCEL
-	je	.close
-	cmp	[wparam],IDOK
-	jne	.processed
-	;invoke  GetDlgItemInt,[hwnd_dlg],ID_ROW,param_buffer,FALSE
-	;mov     [aepos.caretLine],eax
-	;mov     [aepos.selectionLine],eax
-	;invoke  IsDlgButtonChecked,[hwnd_dlg],ID_SELECT
-	;or      eax,eax
-	;jz      .position
-	invoke	MessageBox,0,'ok btn',_msg_caption,MB_OK+MB_ICONINFORMATION
-	jmp	.processed
-  .close:
-	invoke	EndDialog,[hwnd_dlg],FALSE
-  .processed:
-	mov	eax,1
-  .finish:
-	pop	edi esi ebx
+proc ConfigDialog hwnd_dlg,msg,wparam,lparam
+	.if [msg] = WM_INITDIALOG
+	   mov eax,TRUE
+	.elseif [msg] = WM_CLOSE
+	   invoke  EndDialog,[hwnd_dlg],0
+	   mov eax,TRUE
+	.elseif [msg] = WM_COMMAND
+	   .if [wparam] = IDCANCEL
+	      invoke  EndDialog,[hwnd_dlg],0
+	   .elseif [wparam] = IDOK
+	      invoke  MessageBox,0,'ok btn',_msg_caption,MB_OK+MB_ICONINFORMATION
+	   .else
+	      nop
+	      ;invoke  GetDlgItemInt,[hwnd_dlg],ID_ROW,param_buffer,FALSE
+	      ;mov     [aepos.caretLine],eax
+	      ;mov     [aepos.selectionLine],eax
+	      ;invoke  IsDlgButtonChecked,[hwnd_dlg],ID_SELECT
+	      ;or      eax,eax
+	      ;jz      .position
+	   .endif
+	   mov eax,TRUE
+	.else
+	   mov eax,FALSE
+	.endif
+
 	ret
 endp
 
@@ -253,10 +247,10 @@ section '.rsrc' resource data readable
 
   ; resource subdirectories
 
-  IDD_POSITION	      = 301
+  IDD_CONFIG = 301
 
   resource dialogs,\
-	   IDD_POSITION,LANG_ENGLISH+SUBLANG_DEFAULT,position_dialog
+	   IDD_CONFIG,LANG_ENGLISH+SUBLANG_DEFAULT,config_dialog
 
   resource menus,\
 	   RC_menu_id,LANG_ENGLISH+SUBLANG_DEFAULT,popup_menu
@@ -264,7 +258,7 @@ section '.rsrc' resource data readable
   resource versions,\
 	   1,LANG_NEUTRAL,version
 
-  dialog position_dialog,'Position',40,40,126,54,WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME
+  dialog config_dialog,'Config',40,40,126,54,WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME
     dialogitem 'STATIC','&Row:',-1,4,8,28,8,WS_VISIBLE+SS_RIGHT
     dialogitem 'EDIT','',777,36,6,34,12,WS_VISIBLE+WS_BORDER+WS_TABSTOP+ES_NUMBER
     dialogitem 'STATIC','&Column:',-1,4,26,28,8,WS_VISIBLE+SS_RIGHT
