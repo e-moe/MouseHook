@@ -16,10 +16,6 @@ section '.data' data readable writeable
 
   _tskbarrcrt db 'TaskbarCreated',0
 
-  _about db '&About',0
-  _autorun db 'Auto&run',0
-  _exit  db '&Exit',0
-
   _msg_caption db 'MouseHook',0
   _msg_about db 'MouseHook ver 0.1, Freeware edition.',13,10,\
 		'2011 ',0A9h,' Nikolay Labinskiy aka e-moe',13,10,\
@@ -27,15 +23,13 @@ section '.data' data readable writeable
 
   _reg_autorun db 'Software\Microsoft\Windows\CurrentVersion\Run',0
 
-  _priority   dd ?
+  translated  dd ?
 
   hInstance   dd ?
   menu_nhdl   dd ?
   wnd_hndl    dd ?
   mutex_hndl  dd ?
 
-  target_pid  dd ?
-  target_hndl dd ?
 
   WM_TASKBARCREATED dd ?
 
@@ -54,9 +48,6 @@ section '.data' data readable writeable
   KeyAutorunType dd REG_SZ
   DataSize dd MAX_PATH
   ProgrPath db MAX_PATH+3 dup (?)
-
-  TokenAccessHandle dd ?
-
 
   ERROR_ALREADY_EXISTS = 183
   ERROR_SUCCESS = 0
@@ -192,7 +183,15 @@ proc WindowProc uses ebx, hwnd,wmsg,wparam,lparam
 endp
 
 proc ConfigDialog hwnd_dlg,msg,wparam,lparam
+   locals
+      height dd ?
+      width  dd ?
+      error  dd FALSE
+   endl
 	.if [msg] = WM_INITDIALOG
+	   ;TODO: Load params form registry
+	   invoke  SetDlgItemInt,[hwnd_dlg],IDC_HEIGHT,0,FALSE
+	   invoke  SetDlgItemInt,[hwnd_dlg],IDC_WIDTH,0,FALSE
 	   mov eax,TRUE
 	.elseif [msg] = WM_CLOSE
 	   invoke  EndDialog,[hwnd_dlg],0
@@ -201,7 +200,28 @@ proc ConfigDialog hwnd_dlg,msg,wparam,lparam
 	   .if [wparam] = IDCANCEL
 	      invoke  EndDialog,[hwnd_dlg],0
 	   .elseif [wparam] = IDOK
-	      invoke  MessageBox,0,'ok btn',_msg_caption,MB_OK+MB_ICONINFORMATION
+	      ;Height
+	      invoke  GetDlgItemInt,[hwnd_dlg],IDC_HEIGHT,translated,FALSE
+	      .if [translated] = TRUE
+		 mov [height], eax
+	      .else
+		 mov [error], TRUE
+	      .endif
+	      ;Width
+	      invoke  GetDlgItemInt,[hwnd_dlg],IDC_WIDTH,translated,FALSE
+	      .if [translated] = TRUE
+		 mov [width], eax
+	      .else
+		 mov [error], TRUE
+	      .endif
+	      ;Save
+	      .if [error] = FALSE
+		 ;TODO: Save params to registry
+		 ;TODO: Send to hook_dll new params
+		 nop
+	      .else
+		 invoke  MessageBox,0,'Incorrect Width and/or Heigth values.',_msg_caption,MB_OK+MB_ICONERROR
+	      .endif
 	   .else
 	      nop
 	      ;invoke  GetDlgItemInt,[hwnd_dlg],ID_ROW,param_buffer,FALSE
@@ -239,15 +259,19 @@ section '.idata' import data readable writeable
 
 section '.rsrc' resource data readable
 
+  IDD_CONFIG = 301
+  IDC_STATIC = -1
+  IDC_HEIGHT = 401
+  IDC_WIDTH  = 402
+
   ; resource directory
 
   directory RT_DIALOG,dialogs,\
 	    RT_MENU,menus,\
-	    RT_VERSION,versions
+	    RT_VERSION,versions,\
+	    RT_MANIFEST,manifests
 
   ; resource subdirectories
-
-  IDD_CONFIG = 301
 
   resource dialogs,\
 	   IDD_CONFIG,LANG_ENGLISH+SUBLANG_DEFAULT,config_dialog
@@ -258,14 +282,17 @@ section '.rsrc' resource data readable
   resource versions,\
 	   1,LANG_NEUTRAL,version
 
-  dialog config_dialog,'Config',40,40,126,54,WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME
-    dialogitem 'STATIC','&Row:',-1,4,8,28,8,WS_VISIBLE+SS_RIGHT
-    dialogitem 'EDIT','',777,36,6,34,12,WS_VISIBLE+WS_BORDER+WS_TABSTOP+ES_NUMBER
-    dialogitem 'STATIC','&Column:',-1,4,26,28,8,WS_VISIBLE+SS_RIGHT
-    dialogitem 'EDIT','',999,36,24,34,12,WS_VISIBLE+WS_BORDER+WS_TABSTOP+ES_NUMBER
-    dialogitem 'BUTTON','&Select',696,36,42,48,8,WS_VISIBLE+WS_TABSTOP+BS_AUTOCHECKBOX
-    dialogitem 'BUTTON','OK',IDOK,78,6,42,14,WS_VISIBLE+WS_TABSTOP+BS_DEFPUSHBUTTON
-    dialogitem 'BUTTON','C&ancel',IDCANCEL,78,22,42,14,WS_VISIBLE+WS_TABSTOP+BS_PUSHBUTTON
+  resource manifests,\
+	   1,LANG_NEUTRAL,manifest
+
+  dialog config_dialog,<'MouseHook ',2014h,' Config'>,	0,0,171,54,   DS_3DLOOK+DS_CENTER+DS_MODALFRAME+WS_CAPTION+WS_VISIBLE+WS_POPUP+WS_SYSMENU
+    dialogitem 'BUTTON', 'OK',	    IDOK,     110,10,50,14, WS_VISIBLE+WS_TABSTOP+BS_DEFPUSHBUTTON
+    dialogitem 'BUTTON', 'C&ancel', IDCANCEL, 110,30,50,14, WS_VISIBLE+WS_TABSTOP+BS_PUSHBUTTON
+    dialogitem 'STATIC', 'Enter hookRect params:', IDC_STATIC, 5,5,78,8, WS_VISIBLE+SS_LEFT
+    dialogitem 'STATIC', 'Height:', IDC_STATIC, 5, 20,25,8,  WS_VISIBLE+SS_RIGHT
+    dialogitem 'STATIC', 'Width:',  IDC_STATIC, 5, 35,25,8,  WS_VISIBLE+SS_RIGHT
+    dialogitem 'EDIT',	 '',	    IDC_HEIGHT, 35,20,40,10, WS_VISIBLE+WS_TABSTOP+ES_AUTOHSCROLL+ES_NUMBER
+    dialogitem 'EDIT',	 '',	    IDC_WIDTH,	35,35,40,10, WS_VISIBLE+WS_TABSTOP+ES_AUTOHSCROLL+ES_NUMBER
   enddialog
 
   menu popup_menu
@@ -278,9 +305,13 @@ section '.rsrc' resource data readable
 	      menuitem 'Exit',cmd_Exit,MFR_END
 
   versioninfo version,VOS__WINDOWS32,VFT_APP,VFT2_UNKNOWN,LANG_ENGLISH+SUBLANG_DEFAULT,0,\
-	      'FileDescription','MouseHook - Multiple screen mouse helper',\
-	      'ProductName','MouseHook - Multiple screen mouse helper',\
+	      'FileDescription',<'MouseHook ',2014h,' Multiple screen mouse helper'>,\
+	      'ProductName',<'MouseHook ',2014h,' Multiple screen mouse helper'>,\
 	      'LegalCopyright',<'2011 ',0A9h,' Nikolay Labinskiy aka e-moe.'>,\
 	      'FileVersion','0.1',\
 	      'ProductVersion','0.1',\
 	      'OriginalFilename','MouseHook.exe'
+
+  resdata manifest
+    file 'manifest.xml'
+  endres
