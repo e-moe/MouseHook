@@ -7,6 +7,12 @@ entry start
 
 include 'win32axp.inc'
 
+struct MY_CONFIG
+  width   dd ?
+  height  dd ?
+  autorun dd ?
+ends
+
 section '.data' data readable writeable
 
   _title db 'MouseHook',0
@@ -21,9 +27,21 @@ section '.data' data readable writeable
 		'2011 ',0A9h,' Nikolay Labinskiy aka e-moe',13,10,\
 		'e-mail: e-moe@ukr.net',0
 
-  _reg_autorun db 'Software\Microsoft\Windows\CurrentVersion\Run',0
+  default_width  = 100
+  default_height = 100
+
+  hKey dd ?
+  KeyAutorunType dd REG_SZ
+  _opt_type	 dd REG_DWORD
+  _reg_autorun	 db 'Software\Microsoft\Windows\CurrentVersion\Run',0
+  _reg_MouseHook db 'Software\Балалайка 3 струны LTD.\MouseHook',0
+  _opt_height	 db 'height',0
+  _opt_width	 db 'width',0
+  _opt_size	 dd 4
 
   translated  dd ?
+
+  config MY_CONFIG
 
   hInstance   dd ?
   menu_nhdl   dd ?
@@ -44,10 +62,8 @@ section '.data' data readable writeable
   cmd_Config = 103
   cmd_Exit = 104
 
-  hKey dd ?
-  KeyAutorunType dd REG_SZ
-  DataSize dd MAX_PATH
-  ProgrPath db MAX_PATH+3 dup (?)
+  DataSize	 dd MAX_PATH
+  ProgrPath	 db MAX_PATH+3 dup (?)
 
   ERROR_ALREADY_EXISTS = 183
   ERROR_SUCCESS = 0
@@ -82,17 +98,18 @@ section '.code' code readable executable
 	   mov	   [wnd_hndl],eax
 	.endif
 
+	call	LoadConfig
+	invoke	ConfigHook,[config.height],[config.width]
+
 	invoke	LoadMenu,[hInstance],RC_menu_id
 	invoke	GetSubMenu,eax,0
 	mov	[menu_nhdl],eax
-	invoke	RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
-	invoke	RegQueryValueEx,[hKey],_title,NULL,KeyAutorunType,ProgrPath,DataSize
-	.if eax = ERROR_SUCCESS
+
+	.if [config.autorun] = TRUE
 	   invoke  CheckMenuItem,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND + MF_CHECKED
 	.else
 	   invoke  CheckMenuItem,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND + MF_UNCHECKED
 	.endif
-	invoke	RegCloseKey,[hKey]
 
 	mov	eax,[wnd_hndl]
 	mov	[ntf.hWnd],eax
@@ -146,20 +163,10 @@ proc WindowProc uses ebx, hwnd,wmsg,wparam,lparam
 	      and     eax,MF_CHECKED
 	      .if eax <> 0
 		 invoke  CheckMenuItem,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND + MF_UNCHECKED
-		 invoke  RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
-		 invoke  RegDeleteValue,[hKey],_title
-		 invoke  RegCloseKey,[hKey]
+		 stdcall UninstallAutorun
 	      .else
 		 invoke  CheckMenuItem,[menu_nhdl],cmd_Autorun,MF_BYCOMMAND + MF_CHECKED
-		 mov	 [ProgrPath],'"'
-		 invoke  GetModuleFileName,NULL,ProgrPath+1,MAX_PATH
-		 mov	 ebx,eax
-		 mov	 [ProgrPath+ebx+1],'"'
-		 mov	 [ProgrPath+ebx+2],0
-		 add	 ebx,3
-		 invoke  RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
-		 invoke  RegSetValueEx,[hKey],_title,0,REG_SZ,ProgrPath,ebx
-		 invoke  RegCloseKey,[hKey]
+		 stdcall InstallAutorun
 	      .endif
 	   .endif
 	.elseif eax = WM_USER+1
@@ -189,9 +196,9 @@ proc ConfigDialog hwnd_dlg,msg,wparam,lparam
       error  dd FALSE
    endl
 	.if [msg] = WM_INITDIALOG
-	   ;TODO: Load params form registry
-	   invoke  SetDlgItemInt,[hwnd_dlg],IDC_HEIGHT,0,FALSE
-	   invoke  SetDlgItemInt,[hwnd_dlg],IDC_WIDTH,0,FALSE
+	   call    LoadConfig
+	   invoke  SetDlgItemInt,[hwnd_dlg],IDC_HEIGHT,[config.height],FALSE
+	   invoke  SetDlgItemInt,[hwnd_dlg],IDC_WIDTH,[config.width],FALSE
 	   mov eax,TRUE
 	.elseif [msg] = WM_CLOSE
 	   invoke  EndDialog,[hwnd_dlg],0
@@ -216,25 +223,83 @@ proc ConfigDialog hwnd_dlg,msg,wparam,lparam
 	      .endif
 	      ;Save
 	      .if [error] = FALSE
-		 ;TODO: Save params to registry
-		 ;TODO: Send to hook_dll new params
-		 nop
+		 ;Save params to registry
+		 mov eax, [height]
+		 mov [config.height], eax
+		 mov eax, [width]
+		 mov [config.width], eax
+		 call	 SaveConfig
+		 invoke  ConfigHook,[config.height],[config.width]
+		 invoke  EndDialog,[hwnd_dlg],0
 	      .else
 		 invoke  MessageBox,0,'Incorrect Width and/or Heigth values.',_msg_caption,MB_OK+MB_ICONERROR
 	      .endif
-	   .else
-	      nop
-	      ;invoke  GetDlgItemInt,[hwnd_dlg],ID_ROW,param_buffer,FALSE
-	      ;mov     [aepos.caretLine],eax
-	      ;mov     [aepos.selectionLine],eax
-	      ;invoke  IsDlgButtonChecked,[hwnd_dlg],ID_SELECT
-	      ;or      eax,eax
-	      ;jz      .position
 	   .endif
 	   mov eax,TRUE
 	.else
 	   mov eax,FALSE
 	.endif
+
+	ret
+endp
+
+proc InstallAutorun uses eax ebx
+	mov	[config.autorun],TRUE
+	mov	[ProgrPath],'"'
+	invoke	GetModuleFileName,NULL,ProgrPath+1,MAX_PATH
+	mov	ebx,eax
+	mov	[ProgrPath+ebx+1],'"'
+	mov	[ProgrPath+ebx+2],0
+	add	ebx,3
+	invoke	RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
+	invoke	RegSetValueEx,[hKey],_title,0,REG_SZ,ProgrPath,ebx
+	invoke	RegCloseKey,[hKey]
+	ret
+endp
+
+proc UninstallAutorun uses eax
+	mov	[config.autorun],FALSE
+	invoke	RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
+	invoke	RegDeleteValue,[hKey],_title
+	invoke	RegCloseKey,[hKey]
+	ret
+endp
+
+proc LoadConfig uses eax
+	invoke	RegOpenKeyEx,HKEY_CURRENT_USER,_reg_autorun,0,KEY_ALL_ACCESS,hKey
+	invoke	RegQueryValueEx,[hKey],_title,NULL,KeyAutorunType,ProgrPath,DataSize
+	.if eax = ERROR_SUCCESS
+	   mov [config.autorun],TRUE
+	.else
+	   mov [config.autorun],FALSE
+	.endif
+	invoke	RegCloseKey,[hKey]
+
+	invoke	RegCreateKeyEx,HKEY_CURRENT_USER,_reg_MouseHook,0,NULL,REG_OPTION_NON_VOLATILE,KEY_ALL_ACCESS,NULL,hKey,NULL
+	invoke	RegQueryValueEx,[hKey],_opt_height,NULL,_opt_type,config.height,_opt_size
+	.if eax <> ERROR_SUCCESS
+	   mov	 [config.height],default_height
+	.endif
+	invoke	RegQueryValueEx,[hKey],_opt_width,NULL,_opt_type,config.width,_opt_size
+	.if eax <> ERROR_SUCCESS
+	   mov	 [config.width],default_width
+	.endif
+	invoke	RegCloseKey,[hKey]
+
+	ret
+endp
+
+proc SaveConfig uses eax
+	.if [config.autorun] = TRUE
+	   stdcall InstallAutorun
+	.else
+	   stdcall UninstallAutorun
+	.endif
+
+	invoke	RegOpenKeyEx,HKEY_CURRENT_USER,_reg_MouseHook,0,KEY_ALL_ACCESS,hKey
+	invoke	RegSetValueEx,[hKey],_opt_height,0,REG_DWORD,config.height,[_opt_size]
+	invoke	RegSetValueEx,[hKey],_opt_width,0,REG_DWORD,config.width,[_opt_size]
+	invoke	RegCloseKey,[hKey]
 
 	ret
 endp
@@ -255,7 +320,8 @@ section '.idata' import data readable writeable
 
   import hook_dll,\
 	 InstallHook,'InstallHook',\
-	 UninstallHook,'UninstallHook'
+	 UninstallHook,'UninstallHook',\
+	 ConfigHook,'ConfigHook'
 
 section '.rsrc' resource data readable
 

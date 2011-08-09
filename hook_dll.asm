@@ -18,10 +18,10 @@ section '.data' data readable writeable
   hHook     dd ?
   hooked    dd 0
 
-  xHook = 100
-  yHook = 100
+  xHook dd 1
+  yHook dd 1
 
-  clipRect RECT 0,0, ?,?
+  clipRect RECT 500,0, ?,?
   hookRect RECT 0,0, ?,?
 
 section '.text' code readable executable
@@ -40,11 +40,12 @@ proc Init uses eax
     invoke GetSystemMetrics,SM_CXSCREEN
     mov    [clipRect.right],  eax
     mov    [hookRect.right],  eax
-    sub    eax,xHook
+    sub    eax,[xHook]
     mov    [hookRect.left],   eax
     invoke GetSystemMetrics,SM_CYSCREEN
     mov    [clipRect.bottom], eax
-    mov    [hookRect.bottom], yHook
+    mov    eax,[yHook]
+    mov    [hookRect.bottom], eax
     ret
 endp
 
@@ -62,7 +63,7 @@ proc MouseProc uses ebx, nCode,wParam,lParam
 	    .endif
 	.else
 	    .if [hooked] <> 0
-		invoke ClipCursor,NULL
+		;invoke ClipCursor,NULL
 		mov [hooked],0
 	    .endif
 	.endif
@@ -83,6 +84,15 @@ proc UninstallHook uses eax
     ret
 endp
 
+proc ConfigHook uses eax, height,width
+    mov  eax,[height]
+    mov  [yHook],eax
+    mov  eax,[width]
+    mov  [xHook],eax
+    call Init
+    ret
+endp
+
 section '.idata' import data readable writeable
 
   library user32,'USER32.DLL'
@@ -93,6 +103,7 @@ section '.edata' export data readable
 
   export 'HOOK_DLL.DLL',\
 	 InstallHook,'InstallHook',\
-	 UninstallHook,'UninstallHook'
+	 UninstallHook,'UninstallHook',\
+	 ConfigHook,'ConfigHook'
 
 section '.reloc' fixups data discardable
