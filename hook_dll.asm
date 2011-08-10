@@ -21,7 +21,7 @@ section '.data' data readable writeable
   xHook dd 1
   yHook dd 1
 
-  clipRect RECT 500,0, ?,?
+  clipRect RECT 0,0, ?,?
   hookRect RECT 0,0, ?,?
 
 section '.text' code readable executable
@@ -46,6 +46,7 @@ proc Init uses eax
     mov    [clipRect.bottom], eax
     mov    eax,[yHook]
     mov    [hookRect.bottom], eax
+
     ret
 endp
 
@@ -63,7 +64,7 @@ proc MouseProc uses ebx, nCode,wParam,lParam
 	    .endif
 	.else
 	    .if [hooked] <> 0
-		;invoke ClipCursor,NULL
+		invoke ClipCursor,NULL
 		mov [hooked],0
 	    .endif
 	.endif
@@ -73,7 +74,7 @@ proc MouseProc uses ebx, nCode,wParam,lParam
 endp
 
 proc InstallHook uses eax
-    invoke SetWindowsHookEx,WH_MOUSE,MouseProc,[hInstance],NULL
+    invoke SetWindowsHookEx,WH_MOUSE,MouseProc,[hInstance],0
     mov    [hHook],eax
     ret
 endp
