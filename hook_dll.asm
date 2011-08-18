@@ -12,6 +12,14 @@ struct MOUSEHOOKSTRUCT
   dwExtraInfo	dd ?
 ends
 
+struct MSLLHOOKSTRUCT
+  pt		POINT
+  mouseData	dd ?
+  flags 	dd ?
+  time		dd ?
+  dwExtraInfo	dd ?
+ends
+
 section '.data' data readable writeable
 
   hInstance dd 0
@@ -54,7 +62,7 @@ proc MouseProc uses ebx, nCode,wParam,lParam
     .if [nCode] >= 0
 	mov ebx,[lParam]
 	virtual at ebx
-	    mhs MOUSEHOOKSTRUCT
+	    mhs MSLLHOOKSTRUCT
 	end virtual
 	invoke PtInRect,hookRect,[mhs.pt.x],[mhs.pt.y]
 	.if eax <> 0
@@ -74,7 +82,7 @@ proc MouseProc uses ebx, nCode,wParam,lParam
 endp
 
 proc InstallHook uses eax
-    invoke SetWindowsHookEx,WH_MOUSE,MouseProc,[hInstance],0
+    invoke SetWindowsHookEx,WH_MOUSE_LL,MouseProc,[hInstance],NULL
     mov    [hHook],eax
     ret
 endp
