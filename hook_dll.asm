@@ -26,11 +26,13 @@ section '.data' data readable writeable
   hHook     dd ?
   hooked    dd 0
 
-  xHook dd 1
-  yHook dd 1
+  xHook   dd 10
+  yHook   dd 10
+  hookGap dd 50
 
-  clipRect RECT 0,0, ?,?
-  hookRect RECT 0,0, ?,?
+  clipRect    RECT 0,0, ?,?
+  hookRect    RECT 0,0, ?,?
+  unHookRect  RECT 0,0, ?,?
 
 section '.text' code readable executable
 
@@ -44,16 +46,24 @@ proc DllEntryPoint hinstDLL,fdwReason,lpvReserved
     ret
 endp
 
-proc Init uses eax
+proc Init uses eax ebx
     invoke GetSystemMetrics,SM_CXSCREEN
-    mov    [clipRect.right],  eax
-    mov    [hookRect.right],  eax
+    mov    [clipRect.right],   eax
+    mov    [hookRect.right],   eax
+
+    mov    ebx,eax
+    add    ebx,[hookGap]
+    mov    [unHookRect.right], ebx
+
     sub    eax,[xHook]
-    mov    [hookRect.left],   eax
+    mov    [hookRect.left],    eax
+    mov    [unHookRect.left],  eax
+
     invoke GetSystemMetrics,SM_CYSCREEN
-    mov    [clipRect.bottom], eax
+    mov    [clipRect.bottom],  eax
     mov    eax,[yHook]
-    mov    [hookRect.bottom], eax
+    mov    [hookRect.bottom],  eax
+    mov    [unHookRect.bottom],eax
 
     ret
 endp
@@ -66,14 +76,17 @@ proc MouseProc uses ebx, nCode,wParam,lParam
 	end virtual
 	invoke PtInRect,hookRect,[mhs.pt.x],[mhs.pt.y]
 	.if eax <> 0
-	    .if [hooked] = 0
+	    ;.if [hooked] = 0
 		invoke ClipCursor,clipRect
 		mov [hooked],1
-	    .endif
+	    ;.endif
 	.else
 	    .if [hooked] <> 0
-		invoke ClipCursor,NULL
-		mov [hooked],0
+		invoke PtInRect,unHookRect,[mhs.pt.x],[mhs.pt.y]
+		.if eax = 0
+		    invoke ClipCursor,NULL
+		    mov [hooked],0
+		.endif
 	    .endif
 	.endif
     .endif
